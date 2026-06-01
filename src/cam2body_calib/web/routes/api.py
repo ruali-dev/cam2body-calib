@@ -58,7 +58,7 @@ class SolveRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     pose_matrix: list[list[float]]
-    profile: str = "vehicle_lh_pose6"
+    profile: str = "left_handed"
 
 
 # ── Camera intrinsics upload ────────────────────────────────────────
@@ -173,16 +173,30 @@ def solve_pnp(req: SolveRequest):
 # ── Export profile ──────────────────────────────────────────────────
 
 
+@router.get("/export/profiles")
+def list_export_profiles():
+    """List available export profiles with descriptions."""
+    from cam2body_calib.exporters.pose6_profiles import list_profiles
+    return list_profiles()
+
+
 @router.post("/export")
 def export_pose(req: ExportRequest):
-    """Export a pose matrix in a custom coordinate convention."""
-    from cam2body_calib.exporters.vehicle_lh_pose6 import VehicleLHPose6Exporter
+    """Export a pose matrix in the specified coordinate convention.
+
+    Supported profiles: left_handed, right_handed.
+    """
+    from cam2body_calib.exporters.pose6_profiles import get_exporter
 
     T = np.array(req.pose_matrix, dtype=np.float64)
     if T.shape != (4, 4):
         raise HTTPException(400, "pose_matrix must be 4x4")
 
-    exporter = VehicleLHPose6Exporter()
+    try:
+        exporter = get_exporter(req.profile)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
     pose6 = exporter.export(T)
     return {
         "x": pose6.x,
