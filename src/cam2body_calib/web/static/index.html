@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cam2body-calib</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0C0F14;
+  --surface:  #161A22;
+  --border:   #252A33;
+  --text:     #D4D9E0;
+  --text-dim: #6B7280;
+  --accent:   #4DA6FF;
+  --data:     #5FE79C;
+  --warning:  #E5A850;
+  --danger:   #E0556A;
+  --radius:   8px;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'Chivo Mono', 'Courier New', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* grain overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.6;
+}
+
+/* ── header ── */
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0; z-index: 1;
+}
+header h1 {
+  font-family: var(--font-mono); font-size: 15px; font-weight: 600;
+  letter-spacing: 0.08em; color: var(--text); white-space: nowrap;
+}
+header h1 span { color: var(--accent); }
+.header-spacer { flex: 1; }
+header label { font-size: 12px; color: var(--text-dim); margin-right: 4px; }
+header select, header button {
+  font-family: var(--font-sans); font-size: 13px;
+  padding: 6px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+  cursor: pointer; transition: border-color 0.15s;
+}
+header select:hover, header button:hover { border-color: var(--accent); }
+header button.primary {
+  background: var(--accent); color: #0C0F14; border-color: var(--accent);
+  font-weight: 600;
+}
+header button.primary:hover { filter: brightness(1.1); }
+
+/* ── main layout ── */
+main {
+  display: flex; flex: 1; overflow: hidden; gap: 1px; background: var(--border);
+}
+
+/* ── viewer panel ── */
+.viewer {
+  flex: 1; position: relative; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.viewer canvas { display: block; cursor: crosshair; }
+.viewer .drop-hint {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; pointer-events: none; z-index: 2;
+}
+.viewer .drop-hint p {
+  font-family: var(--font-mono); font-size: 14px; color: var(--text-dim);
+  text-align: center; line-height: 1.8;
+}
+.viewer .drop-hint p strong { color: var(--accent); font-weight: 600; }
+.viewer .crosshair {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+.viewer .vignette {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+}
+
+/* ── side panel ── */
+.side {
+  width: 400px; flex-shrink: 0; display: flex; flex-direction: column;
+  background: var(--surface); overflow-y: auto;
+}
+
+/* ── table ── */
+.point-table {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--font-mono); font-size: 13px;
+}
+.point-table th {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 500;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 10px 8px; text-align: center;
+  border-bottom: 1px solid var(--border); position: sticky; top: 0;
+  background: var(--surface);
+}
+.point-table td { padding: 6px 4px; text-align: center; }
+.point-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+.point-table tbody tr:hover { background: rgba(77,166,255,0.06); }
+.point-table .pt-id { color: var(--text-dim); width: 32px; }
+.point-table .pt-uv { color: var(--text); font-size: 12px; }
+.point-table input {
+  width: 64px; text-align: center; font-family: var(--font-mono); font-size: 12px;
+  background: var(--bg); color: var(--data); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 2px; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.point-table input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(77,166,255,0.15);
+}
+.point-table input::placeholder { color: var(--text-dim); opacity: 0.5; }
+
+.section-title {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 500;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 14px 16px 8px;
+}
+.section-actions { padding: 12px 16px; display: flex; gap: 8px; }
+.section-actions button {
+  flex: 1; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+  padding: 10px 16px; border-radius: 24px; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); cursor: pointer;
+  transition: all 0.2s;
+}
+.section-actions button:hover {
+  background: var(--accent); color: #0C0F14;
+}
+.section-actions button:disabled {
+  opacity: 0.35; cursor: not-allowed;
+}
+.section-actions button:disabled:hover { background: transparent; color: var(--accent); }
+
+/* ── results ── */
+.results {
+  margin: 0 16px 16px; padding: 16px;
+  background: var(--bg); border-radius: var(--radius);
+  border-left: 3px solid var(--data);
+  animation: slideUp 0.3s ease-out;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.results .param {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 3px 0; font-size: 13px;
+}
+.results .param .label { color: var(--text-dim); font-family: var(--font-sans); }
+.results .param .value { font-family: var(--font-mono); color: var(--data); font-weight: 600; }
+.results .param .value.sub { color: var(--text); font-weight: 400; font-size: 12px; }
+
+.results .quality-bar {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-family: var(--font-sans); font-size: 11px; font-weight: 600;
+  margin-top: 6px;
+}
+.results .quality-bar.good { background: rgba(95,231,156,0.15); color: var(--data); }
+.results .quality-bar.fair { background: rgba(229,168,80,0.15); color: var(--warning); }
+.results .quality-bar.poor { background: rgba(224,85,106,0.15); color: var(--danger); }
+
+.empty-state {
+  padding: 40px 16px; text-align: center;
+  font-family: var(--font-mono); font-size: 13px; color: var(--text-dim);
+  line-height: 1.8;
+}
+
+/* ── toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-sans); font-size: 13px;
+  padding: 10px 20px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); z-index: 10000;
+  animation: toastIn 0.3s ease-out;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.toast.error { border-color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CAM<span>2</span>BODY<span>·</span>CALIB</h1>
+  <div class="header-spacer"></div>
+  <label for="camera-select">Camera</label>
+  <select id="camera-select"><option value="">-- load --</option></select>
+  <button id="upload-btn">Load Image</button>
+  <input type="file" id="file-input" accept="image/*" style="display:none">
+  <button id="export-btn" class="primary" disabled>Export YAML</button>
+</header>
+
+<main>
+  <div class="viewer" id="viewer">
+    <div class="crosshair"></div>
+    <div class="vignette"></div>
+    <div class="drop-hint" id="drop-hint"><p><strong>DROP IMAGE</strong><br>or click Load Image</p></div>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="side" id="side">
+    <div class="section-title">Annotation Points</div>
+    <div style="overflow-y:auto; flex:1">
+      <table class="point-table">
+        <thead><tr><th>#</th><th>u</th><th>v</th><th>x (m)</th><th>y (m)</th><th>z (m)</th></tr></thead>
+        <tbody id="points-body"><tr><td colspan="6" class="empty-state" style="text-align:center">Click on the image to add points</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="section-actions">
+      <button id="clear-btn" disabled>Clear All</button>
+      <button id="solve-btn" disabled>Solve PnP</button>
+    </div>
+
+    <div id="results-area" style="padding-bottom:16px"></div>
+  </div>
+</main>
+
+<script>
+// ── State ──
+const state = {
+  camera: null,
+  image: null,       // HTMLImageElement
+  imgW: 0, imgH: 0,
+  points: [],        // [{u, v, x, y, z}]
+  result: null,      // API solve result
+  zoom: 1, ox: 0, oy: 0,
+  dragging: false, dragX: 0, dragY: 0, dragOX: 0, dragOY: 0,
+};
+
+// ── DOM refs ──
+const viewer = document.getElementById('viewer');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const dropHint = document.getElementById('drop-hint');
+const cameraSelect = document.getElementById('camera-select');
+const fileInput = document.getElementById('file-input');
+const uploadBtn = document.getElementById('upload-btn');
+const pointsBody = document.getElementById('points-body');
+const clearBtn = document.getElementById('clear-btn');
+const solveBtn = document.getElementById('solve-btn');
+const exportBtn = document.getElementById('export-btn');
+const resultsArea = document.getElementById('results-area');
+
+// ── API helpers ──
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => ({}))).detail || res.statusText;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+// ── Camera loading ──
+async function loadCameras() {
+  const list = await api('/api/cameras');
+  cameraSelect.innerHTML = '<option value="">-- select camera --</option>' +
+    list.map(c => `<option value="${c.name}">${c.name} [${c.model} ${c.image_width}x${c.image_height}]</option>`).join('');
+}
+loadCameras();
+
+// ── Image loading ──
+uploadBtn.onclick = () => fileInput.click();
+fileInput.onchange = () => { if (fileInput.files[0]) loadImage(fileInput.files[0]); };
+
+viewer.addEventListener('dragover', e => { e.preventDefault(); viewer.style.borderColor = 'var(--accent)'; });
+viewer.addEventListener('dragleave', () => { viewer.style.borderColor = ''; });
+viewer.addEventListener('drop', e => {
+  e.preventDefault(); viewer.style.borderColor = '';
+  if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+});
+
+async function loadImage(file) {
+  if (!state.camera) { toast('Select a camera first', 'error'); return; }
+  const fd = new FormData();
+  fd.append('image', file);
+  fd.append('camera_name', state.camera.name);
+  try {
+    const data = await api(`/api/undistort?camera_name=${encodeURIComponent(state.camera.name)}`, { method: 'POST', body: fd });
+    const blob = b64toBlob(data.image_base64);
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      state.image = img;
+      state.imgW = data.width;
+      state.imgH = data.height;
+      state.points = [];
+      state.result = null;
+      resetView();
+      fitZoom();
+      dropHint.style.display = 'none';
+      render();
+      renderTable();
+      renderResults();
+      clearBtn.disabled = true;
+      updateSolveBtn();
+      exportBtn.disabled = true;
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function b64toBlob(b64) {
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new Blob([buf], { type: 'image/png' });
+}
+
+// ── Camera select ──
+cameraSelect.onchange = () => {
+  state.camera = cameraSelect.value ? { name: cameraSelect.value } : null;
+  updateSolveBtn();
+};
+
+// ── Canvas rendering ──
+function fitZoom() {
+  const vr = viewer.getBoundingClientRect();
+  const s = Math.min((vr.width - 40) / state.imgW, (vr.height - 40) / state.imgH, 1.5);
+  state.zoom = s;
+  state.ox = (vr.width - state.imgW * s) / 2;
+  state.oy = (vr.height - state.imgH * s) / 2;
+}
+
+function resetView() {
+  const vr = viewer.getBoundingClientRect();
+  state.ox = (vr.width - state.imgW * state.zoom) / 2;
+  state.oy = (vr.height - state.imgH * state.zoom) / 2;
+}
+
+function render() {
+  const vr = viewer.getBoundingClientRect();
+  canvas.width = vr.width;
+  canvas.height = vr.height;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!state.image) return;
+
+  const { zoom, ox, oy } = state;
+  ctx.drawImage(state.image, ox, oy, state.imgW * zoom, state.imgH * zoom);
+
+  // Points
+  state.points.forEach((p, i) => {
+    const sx = ox + p.u * zoom;
+    const sy = oy + p.v * zoom;
+    const r = 6;
+
+    // connecting line (survey style)
+    if (i > 0) {
+      const prev = state.points[i - 1];
+      ctx.beginPath();
+      ctx.moveTo(ox + prev.u * zoom, oy + prev.v * zoom);
+      ctx.lineTo(sx, sy);
+      ctx.strokeStyle = 'rgba(77,166,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // point circle
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(224,85,106,0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // label
+    ctx.font = "600 11px 'Chivo Mono'";
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(i + 1), sx + 10, sy - 10);
+  });
+
+  // reprojection points (if solved)
+  if (state.result && state.camera) {
+    const K = state.camera.K;
+    // We can't easily reproject in JS without the pose, so skip for now.
+    // The server-side viz can be shown as an overlay if needed.
+  }
+}
+
+// ── Interaction ──
+canvas.addEventListener('mousedown', e => {
+  if (!state.image) return;
+  if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+    state.dragging = true;
+    state.dragX = e.clientX; state.dragY = e.clientY;
+    state.dragOX = state.ox; state.dragOY = state.oy;
+    return;
+  }
+  if (e.button === 0) {
+    const pt = eventToImage(e);
+    state.points.push({ u: pt.u, v: pt.v, x: 0, y: 0, z: 0 });
+    state.result = null;
+    render(); renderTable(); renderResults();
+    clearBtn.disabled = false;
+    updateSolveBtn();
+    exportBtn.disabled = true;
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (state.dragging) {
+    state.ox = state.dragOX + (e.clientX - state.dragX);
+    state.oy = state.dragOY + (e.clientY - state.dragY);
+    render();
+  }
+});
+
+canvas.addEventListener('mouseup', () => { state.dragging = false; });
+canvas.addEventListener('mouseleave', () => { state.dragging = false; });
+
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (!state.points.length) return;
+  const pt = eventToImage(e);
+  let best = 0, bestD = Infinity;
+  state.points.forEach((p, i) => {
+    const d = (p.u - pt.u) ** 2 + (p.v - pt.v) ** 2;
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  state.points.splice(best, 1);
+  state.result = null;
+  render(); renderTable(); renderResults();
+  clearBtn.disabled = state.points.length === 0;
+  updateSolveBtn();
+  exportBtn.disabled = true;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (!state.image) return;
+  const mx = e.clientX, my = e.clientY;
+  const oldZ = state.zoom;
+  state.zoom = Math.min(10, Math.max(0.1, state.zoom * (e.deltaY < 0 ? 1.08 : 0.92)));
+  const r = state.zoom / oldZ;
+  state.ox = mx - r * (mx - state.ox);
+  state.oy = my - r * (my - state.oy);
+  render();
+}, { passive: false });
+
+function eventToImage(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    u: (e.clientX - rect.left - state.ox) / state.zoom,
+    v: (e.clientY - rect.top - state.oy) / state.zoom,
+  };
+}
+
+window.addEventListener('resize', () => { resetView(); render(); });
+
+// ── Table ──
+function renderTable() {
+  if (!state.points.length) {
+    pointsBody.innerHTML = '<tr><td colspan="6" class="empty-state" style="text-align:center">Click on the image to add points</td></tr>';
+    return;
+  }
+  pointsBody.innerHTML = state.points.map((p, i) => `
+    <tr>
+      <td class="pt-id">${i + 1}</td>
+      <td class="pt-uv">${p.u.toFixed(1)}</td>
+      <td class="pt-uv">${p.v.toFixed(1)}</td>
+      <td><input type="number" step="0.01" value="${p.x || ''}" data-idx="${i}" data-field="x" placeholder="0"></td>
+      <td><input type="number" step="0.01" value="${p.y || ''}" data-idx="${i}" data-field="y" placeholder="0"></td>
+      <td><input type="number" step="0.01" value="${p.z || ''}" data-idx="${i}" data-field="z" placeholder="0"></td>
+    </tr>
+  `).join('');
+  document.querySelectorAll('.point-table input').forEach(inp => {
+    inp.addEventListener('input', onCoordInput);
+    inp.addEventListener('change', onCoordInput);
+  });
+}
+
+function onCoordInput(e) {
+  const idx = parseInt(e.target.dataset.idx);
+  const field = e.target.dataset.field;
+  state.points[idx][field] = parseFloat(e.target.value) || 0;
+  state.result = null;
+  renderResults();
+  updateSolveBtn();
+  exportBtn.disabled = true;
+}
+
+function updateSolveBtn() {
+  if (!state.camera || state.points.length < 4) {
+    solveBtn.disabled = true; return;
+  }
+  const allFilled = state.points.every(p => p.x !== undefined && p.y !== undefined && p.z !== undefined);
+  solveBtn.disabled = !allFilled;
+}
+
+// ── Solve ──
+solveBtn.onclick = async () => {
+  try {
+    solveBtn.disabled = true;
+    solveBtn.textContent = 'Solving...';
+    const data = await api('/api/solve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        camera_name: state.camera.name,
+        points: state.points.map(p => ({ u: p.u, v: p.v, x: p.x, y: p.y, z: p.z })),
+      }),
+    });
+    state.result = data;
+    exportBtn.disabled = false;
+    renderResults();
+    toast('Solved — mean error ' + data.reprojection.mean_error.toFixed(2) + ' px');
+  } catch (e) {
+    toast(e.message, 'error');
+    state.result = null;
+    exportBtn.disabled = true;
+    renderResults();
+  } finally {
+    solveBtn.textContent = 'Solve PnP';
+    updateSolveBtn();
+  }
+};
+
+clearBtn.onclick = () => {
+  state.points = [];
+  state.result = null;
+  render(); renderTable(); renderResults();
+  clearBtn.disabled = true;
+  solveBtn.disabled = true;
+  exportBtn.disabled = true;
+};
+
+// ── Export ──
+exportBtn.onclick = async () => {
+  if (!state.result) return;
+  try {
+    const data = await api('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pose_matrix: state.result.T_body_camera_link, profile: 'vehicle_lh_pose6' }),
+    });
+    const yaml = [
+      'child_frame_id: camera',
+      'header:',
+      '  frame_id: body',
+      '  stamp: {sec: 0, nanosec: 0}',
+      'rotation:',
+      `  roll: ${(data.roll * Math.PI / 180).toFixed(6)}`,
+      `  pitch: ${(data.pitch * Math.PI / 180).toFixed(6)}`,
+      `  yaw: ${(data.yaw * Math.PI / 180).toFixed(6)}`,
+      'translation:',
+      `  x: ${data.x.toFixed(4)}`,
+      `  y: ${data.y.toFixed(4)}`,
+      `  z: ${data.z.toFixed(4)}`,
+    ].join('\n');
+    const blob = new Blob([yaml], { type: 'text/yaml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'extrinsic.yaml';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Exported extrinsic.yaml');
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+// ── Results ──
+function renderResults() {
+  if (!state.result) {
+    resultsArea.innerHTML = state.points.length >= 4
+      ? '<div class="empty-state">Fill in x,y,z coordinates<br>then click Solve PnP</div>'
+      : '';
+    return;
+  }
+  const r = state.result;
+  const pos = r.position;
+  const rpy = r.rpy_link;
+  const rpj = r.reprojection;
+
+  let cls;
+  if (rpj.mean_error < 0.5) cls = 'good';
+  else if (rpj.mean_error < 3.0) cls = 'fair';
+  else cls = 'poor';
+
+  resultsArea.innerHTML = `
+    <div class="results">
+      <div class="param"><span class="label">Position (body_rh)</span></div>
+      <div class="param"><span class="label">x forward</span><span class="value">${pos.x.toFixed(4)} m</span></div>
+      <div class="param"><span class="label">y left</span><span class="value">${pos.y.toFixed(4)} m</span></div>
+      <div class="param"><span class="label">z up</span><span class="value">${pos.z.toFixed(4)} m</span></div>
+      <div class="param" style="margin-top:8px"><span class="label">RPY (link)</span></div>
+      <div class="param"><span class="label">roll</span><span class="value sub">${rpy.roll.toFixed(3)}&deg;</span></div>
+      <div class="param"><span class="label">pitch</span><span class="value sub">${rpy.pitch.toFixed(3)}&deg;</span></div>
+      <div class="param"><span class="label">yaw</span><span class="value sub">${rpy.yaw.toFixed(3)}&deg;</span></div>
+      <div class="param" style="margin-top:8px"><span class="label">Reprojection</span></div>
+      <div class="param"><span class="label">mean / max</span><span class="value sub">${rpj.mean_error.toFixed(3)} / ${rpj.max_error.toFixed(3)} px</span></div>
+      <div class="param"><span class="label">inliers</span><span class="value sub">${rpj.inliers}/${rpj.total}</span></div>
+      <span class="quality-bar ${cls}">${cls === 'good' ? 'EXCELLENT' : cls === 'fair' ? 'FAIR' : 'POOR'}</span>
+    </div>
+  `;
+}
+
+// ── Toast ──
+function toast(msg, level) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (level === 'error' ? ' error' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); }, 2500);
+}
+</script>
+</body>
+</html>

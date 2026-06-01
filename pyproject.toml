@@ -24,6 +24,11 @@ dev = [
     "pytest>=7.0",
     "ruff>=0.1.0",
 ]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "python-multipart>=0.0.6",
+]
 
 [project.scripts]
 cam2body-calib = "cam2body_calib.cli:app"

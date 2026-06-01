@@ -39,3 +39,6 @@ data/*
 # Claude AI
 .claude/
 .snapshots/
+
+# CodeGraph index
+.codegraph/
