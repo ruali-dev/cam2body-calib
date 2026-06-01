@@ -159,23 +159,9 @@ Also check:
 - Does the camera forward axis match the expected viewing direction?
 - Are results consistent across multiple views?
 
-## ArUco Auto-Detection (optional)
-
-If your fiducials are ArUco markers, use the `estimate` command for automatic corner detection:
-
-```bash
-uv run cam2body-calib estimate \
-  -i data/image.jpg \
-  -c configs/camera.yaml \
-  -l configs/marker_layout.yaml \
-  -o outputs/result.png
-```
-
-Prepare `marker_layout.yaml` (example: `configs/marker_layout.example.yaml`) with 3D positions of each marker's four corners in body frame. Corner order must match OpenCV's detection order (clockwise from marker top-left).
-
 ## Export Profiles
 
-Different downstream systems expect different pose6 conventions. Declare in `marker_layout.yaml`:
+Different downstream systems expect different pose6 conventions. You can use `VehicleLHPose6Exporter` to convert the canonical right-handed result to left-handed vehicle coordinates:
 
 ```yaml
 export_profiles:
@@ -189,20 +175,6 @@ export_profiles:
 | `vehicle_lh_pose6` | x=fwd, y=right, z=up (LH) | positive = right |
 
 All PnP computation runs in right-handed frame. Left-handed exports use `S@R@S` (det=+1) for safe RPY extraction.
-
-## Quality Assessment
-
-| Mean Reprojection Error | Rating |
-|------------------------|--------|
-| < 0.5 px | Excellent |
-| < 1.5 px | Good |
-| < 3.0 px | Fair — verify with multiple images |
-| > 3.0 px | Unreliable |
-
-Also check:
-- Is the camera position physically plausible?
-- Does the camera forward axis match the expected viewing direction?
-- Are results consistent across multiple views?
 
 ## Running Tests
 
@@ -226,7 +198,7 @@ cam2body-calib/
 │   ├── blur_faces.py             # Batch face blurring
 │   └── interactive_blur.py       # Interactive region blurring
 ├── src/cam2body_calib/
-│   ├── cli.py                    # CLI entry point (estimate / annotate)
+│   ├── cli.py                    # CLI entry point (annotate)
 │   ├── camera/model.py           # CameraModel (pinhole/fisheye + undistort)
 │   ├── config/                   # YAML loading + Pydantic validation
 │   ├── estimation/               # PnP solver, reprojection errors
@@ -247,7 +219,7 @@ cam2body-calib/
 | High reprojection error | Inaccurate intrinsics / wrong 3D coords | Check per-point error distribution |
 | Unreasonable position/orientation | Wrong coordinate system mapping | Verify 3D coordinate axis definitions |
 | PnP fails (0 inliers) | 3D-2D correspondence mismatch | Check axis direction and point ordering |
-| Fisheye detection failure | Image not undistorted | Both CLI commands auto-undistort |
+| Fisheye detection failure | Image not undistorted | The annotate command auto-undistorts when -c is provided |
 | Marker too small/far | Poor corner localization | Keep markers > 30px in image |
 
 ## License

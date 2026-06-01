@@ -180,20 +180,6 @@ export_profiles:
 
 核心 PnP 计算始终在右手系完成，左手系结果通过 `S@R@S`（det=+1）导出。
 
-## ArUco 自动检测（可选）
-
-如果你的标志物是 ArUco markers，也可以用 `estimate` 命令自动检测角点：
-
-```bash
-uv run cam2body-calib estimate \
-  -i data/image.jpg \
-  -c configs/camera.yaml \
-  -l configs/marker_layout.yaml \
-  -o outputs/result.png
-```
-
-需要提前准备 `marker_layout.yaml`（示例见 `configs/marker_layout.example.yaml`），定义每个 marker 四个角点在 body 系下的 3D 坐标。角点顺序必须与 OpenCV 检测顺序一致（顺时针，从 marker 的左上角开始）。
-
 ## 运行测试
 
 ```bash
@@ -220,7 +206,7 @@ cam2body-calib/
 │   ├── blur_faces.py             # 批量人脸模糊
 │   └── interactive_blur.py       # 交互式区域模糊
 ├── src/cam2body_calib/
-│   ├── cli.py                    # CLI 入口（annotate / estimate）
+│   ├── cli.py                    # CLI 入口（annotate）
 │   ├── camera/model.py           # CameraModel（pinhole/fisheye + 去畸变）
 │   ├── config/                   # YAML 加载 + Pydantic 校验
 │   ├── estimation/               # PnP 求解、重投影误差
