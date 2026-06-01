@@ -2,7 +2,7 @@
 
 单目相机到车体坐标系的外参标定工具。
 
-通过图像中已知 3D 位置的标志物（ArUco 标记），用 PnP 方法估计相机在车体坐标系（body/base_link）下的 6-DoF 位姿。
+通过图像中已知 3D 位置的标志物角点，用 PnP 方法估计相机在车体坐标系（body/base_link）下的 6-DoF 位姿。
 
 ## 原理
 
@@ -13,8 +13,6 @@ P_camera = R · P_body + t
 ```
 
 **关键**：`solvePnP` 输出的 tvec 不是相机位置，而是 body 原点在相机系下的坐标。相机在 body 系下的位姿需要取逆：`T_body_cam = inv(T_cam_body)`。
-
-详见配套博文：[从一张图反推相机在哪：PnP 外参估计的原理、实现与坐标系之坑](https://blog.csdn.net/)
 
 ## 坐标系
 
@@ -63,13 +61,11 @@ cd cam2body-calib
 uv sync
 ```
 
-## 快速开始
+## 使用方式
 
 ### 1. 准备文件
 
-最少需要两个配置文件和一个图像：
-
-**camera.yaml** — 相机内参：
+**camera.yaml** — 相机内参（示例见 `configs/camera.example.yaml`）：
 
 ```yaml
 camera_name: "my_camera"
@@ -83,54 +79,7 @@ K:
 D: [-0.3, 0.1, 0.0, 0.0, 0.0]  # pinhole: 5系数; fisheye: 4系数
 ```
 
-**marker_layout.yaml** — 标志物 3D 坐标（body 系，单位米）：
-
-```yaml
-body_frame:
-  name: vehicle
-  convention: x_forward_y_left_z_up
-  handedness: right
-
-dictionary: DICT_4X4_50
-
-markers:
-  0:
-    corners_body:
-      - [1.0,  0.25, 0.2]   # top-left
-      - [1.0, -0.25, 0.2]   # top-right
-      - [1.0, -0.25, 0.1]   # bottom-right
-      - [1.0,  0.25, 0.1]   # bottom-left
-```
-
-> 角点顺序必须和 OpenCV ArUco 检测顺序一致（顺时针，从 marker 的左上角开始）。顺序不一致会导致 PnP 算出错误姿态。
-
-### 2. 运行 ArUco 自动标定
-
-```bash
-uv run cam2body-calib estimate \
-  -i data/image.jpg \
-  -c configs/camera.yaml \
-  -l configs/marker_layout.yaml \
-  -o outputs/result.png
-```
-
-### 3. 查看结果
-
-终端输出包括：
-- T_cam_body、T_body_camera_optical、T_body_camera_link 三个 4×4 矩阵
-- 右手系下的 xyz 位置和 link RPY
-- 重投影误差（mean / max / inlier count）
-- 质量评级（Excellent / Good / Fair / Poor）
-
-可视化图像中：
-- 绿色边框 = 检测到的 marker
-- 红色实心圆 = 检测角点
-- 蓝色十字 = 重投影角点
-- 黄色线 = 误差向量
-
-## 手动标注模式
-
-适用于 marker 自动检测不可用或需要更高精度的场景：
+### 2. 手动标注角点
 
 ```bash
 uv run cam2body-calib annotate \
@@ -140,6 +89,7 @@ uv run cam2body-calib annotate \
 ```
 
 操作：
+
 | 操作 | 按键 |
 |------|------|
 | 点击角点 | 鼠标左键 |
@@ -151,28 +101,54 @@ uv run cam2body-calib annotate \
 | 重置视图 | R |
 | 退出 | Q / ESC |
 
-保存后编辑 YAML 文件填入 body 系 3D 坐标，然后用 Python 调用 `PnPSolver`。
+如果图像是鱼眼相机拍摄的，指定 `-c` 参数后工具会自动去畸变。
 
-## 坐标系切换（Export Profile）
+### 3. 填入 3D 坐标，运行 PnP
 
-不同的下游系统对 pose6 输出格式的要求不同。工具支持通过 export profile 切换，在 `marker_layout.yaml` 中声明：
+保存后编辑 `outputs/annotations.yaml`，为每个标注点填入对应的 body 系 3D 坐标：
 
 ```yaml
-export_profiles:
-  - name: vehicle_lh_pose6
-    type: pose6
+image_points:
+  - u: 367.0
+    v: 507.0
+    x: 2.5        # body 系 x（前）
+    y: 0.6        # body 系 y（左）
+    z: 0.8        # body 系 z（上）
+  - u: 463.0
+    v: 462.0
+    x: 2.5
+    y: -0.6
+    z: 0.8
+  # ...
 ```
 
-可选导出格式：
+然后运行 PnP 求解：
 
-| Profile | 坐标系 | yaw |
-|---------|--------|-----|
-| 不配置（默认） | x=前, y=左, z=上 (右手系) | 左转为正 |
-| `vehicle_lh_pose6` | x=前, y=右, z=上 (左手系) | 右转为正 |
+```python
+import numpy as np
+from cam2body_calib.config.load import load_camera
+from cam2body_calib.estimation.pnp_solver import PnPSolver
+from cam2body_calib.io.yaml_io import read_yaml
 
-核心 PnP 计算始终在右手系完成，左手系结果通过 `S@R@S`（det=+1）导出。
+cam = load_camera("configs/camera.yaml")
+anno = read_yaml("outputs/annotations.yaml")
 
-## 判断结果质量
+obj_pts = np.array([[p["x"], p["y"], p["z"]] for p in anno["image_points"]],
+                   dtype=np.float64)
+img_pts = np.array([[p["u"], p["v"]] for p in anno["image_points"]],
+                   dtype=np.float64)
+
+result = PnPSolver(cam).solve(obj_pts, img_pts)
+print(f"Position: x={result.position_body[0]:.4f}, "
+      f"y={result.position_body[1]:.4f}, "
+      f"z={result.position_body[2]:.4f}")
+print(f"RPY (link): roll={result.rpy_link_body_cam[0]:.4f}, "
+      f"pitch={result.rpy_link_body_cam[1]:.4f}, "
+      f"yaw={result.rpy_link_body_cam[2]:.4f}")
+print(f"Reprojection error: mean={result.reprojection_stats.mean_error:.4f} px")
+```
+
+### 4. 判断结果质量
 
 | 重投影误差均值 | 评价 |
 |---------------|------|
@@ -185,6 +161,38 @@ export_profiles:
 - 相机位置是否在物理合理范围内
 - 相机朝向是否与安装方向一致
 - 多个视角结果是否一致
+- 可视化图中红点（标注）和蓝色十字（重投影）是否基本重合
+
+## 坐标系切换（Export Profile）
+
+不同的下游系统对 pose6 输出格式的要求不同。在 marker_layout.yaml 中声明：
+
+```yaml
+export_profiles:
+  - name: vehicle_lh_pose6
+    type: pose6
+```
+
+| Profile | 坐标系 | yaw |
+|---------|--------|-----|
+| 不配置（默认） | x=前, y=左, z=上 (右手系) | 左转为正 |
+| `vehicle_lh_pose6` | x=前, y=右, z=上 (左手系) | 右转为正 |
+
+核心 PnP 计算始终在右手系完成，左手系结果通过 `S@R@S`（det=+1）导出。
+
+## ArUco 自动检测（可选）
+
+如果你的标志物是 ArUco markers，也可以用 `estimate` 命令自动检测角点：
+
+```bash
+uv run cam2body-calib estimate \
+  -i data/image.jpg \
+  -c configs/camera.yaml \
+  -l configs/marker_layout.yaml \
+  -o outputs/result.png
+```
+
+需要提前准备 `marker_layout.yaml`（示例见 `configs/marker_layout.example.yaml`），定义每个 marker 四个角点在 body 系下的 3D 坐标。角点顺序必须与 OpenCV 检测顺序一致（顺时针，从 marker 的左上角开始）。
 
 ## 运行测试
 
@@ -200,6 +208,10 @@ cam2body-calib/
 ├── pyproject.toml
 ├── configs/                      # 相机内参 + marker 布局示例
 │   ├── camera.example.yaml       # pinhole 相机示例
+│   ├── camera_ne.yaml            # NE 鱼眼相机
+│   ├── camera_nw.yaml            # NW 鱼眼相机
+│   ├── camera_se.yaml            # SE 鱼眼相机
+│   ├── camera_sw.yaml            # SW 鱼眼相机
 │   └── marker_layout.example.yaml
 ├── data/                         # 放置待标定图像
 ├── outputs/                      # 标定结果和可视化
@@ -208,7 +220,7 @@ cam2body-calib/
 │   ├── blur_faces.py             # 批量人脸模糊
 │   └── interactive_blur.py       # 交互式区域模糊
 ├── src/cam2body_calib/
-│   ├── cli.py                    # CLI 入口（estimate / annotate）
+│   ├── cli.py                    # CLI 入口（annotate / estimate）
 │   ├── camera/model.py           # CameraModel（pinhole/fisheye + 去畸变）
 │   ├── config/                   # YAML 加载 + Pydantic 校验
 │   ├── estimation/               # PnP 求解、重投影误差
@@ -229,7 +241,7 @@ cam2body-calib/
 | 重投影误差大 | 内参不准 / 3D 坐标有误 / 标注偏差 | 逐点检查误差分布 |
 | 位置/朝向不合理 | 坐标系映射错了 | 检查 3D 坐标的轴定义 |
 | PnP 失败（0 inlier） | 3D-2D 对应关系错误 | 检查坐标轴方向和点序 |
-| 鱼眼图像检测失败 | 未去畸变 | annotate/estimate 命令会自动去畸变 |
+| 鱼眼图像检测失败 | 未去畸变 | annotate 命令指定 -c 会自动去畸变 |
 | 标志物太小/太远 | 角点定位误差大 | 保持标志物 > 30px |
 
 ## License

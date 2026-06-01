@@ -59,11 +59,11 @@ cd cam2body-calib
 uv sync
 ```
 
-## Quick Start
+## Usage
 
-### 1. Prepare config files
+### 1. Prepare camera intrinsics
 
-**camera.yaml** — Camera intrinsics:
+**camera.yaml** (example: `configs/camera.example.yaml`):
 
 ```yaml
 camera_name: "my_camera"
@@ -77,54 +77,7 @@ K:
 D: [-0.3, 0.1, 0.0, 0.0, 0.0]  # pinhole: 5 coeffs; fisheye: 4 coeffs
 ```
 
-**marker_layout.yaml** — Marker 3D positions in body frame (meters):
-
-```yaml
-body_frame:
-  name: vehicle
-  convention: x_forward_y_left_z_up
-  handedness: right
-
-dictionary: DICT_4X4_50
-
-markers:
-  0:
-    corners_body:
-      - [1.0,  0.25, 0.2]   # top-left
-      - [1.0, -0.25, 0.2]   # top-right
-      - [1.0, -0.25, 0.1]   # bottom-right
-      - [1.0,  0.25, 0.1]   # bottom-left
-```
-
-> Corner order must match OpenCV's ArUco detection order (clockwise from marker top-left). Wrong ordering produces incorrect poses even if reprojection error looks fine.
-
-### 2. Run calibration
-
-```bash
-uv run cam2body-calib estimate \
-  -i data/image.jpg \
-  -c configs/camera.yaml \
-  -l configs/marker_layout.yaml \
-  -o outputs/result.png
-```
-
-### 3. Interpret results
-
-Terminal output includes:
-- Three 4×4 transformation matrices
-- Camera position (xyz) and orientation (roll/pitch/yaw) in body frame
-- Reprojection error statistics (mean / max / inlier count)
-- Quality rating
-
-The visualization image shows:
-- Green borders: detected markers
-- Red circles: detected corners
-- Blue crosses: reprojected corners
-- Yellow lines: per-point error vectors
-
-## Manual Annotation Mode
-
-For cases where automatic ArUco detection is unavailable or higher precision is needed:
+### 2. Annotate corner points
 
 ```bash
 uv run cam2body-calib annotate \
@@ -145,11 +98,84 @@ Controls:
 | Reset view | R |
 | Quit | Q / ESC |
 
-After saving, edit the YAML file to fill in 3D body-frame coordinates, then solve via Python using `PnPSolver`.
+If the image is from a fisheye camera, the tool automatically undistorts it when `-c` is provided.
+
+### 3. Fill in 3D coordinates and solve PnP
+
+Edit `outputs/annotations.yaml` to add body-frame 3D coordinates for each point:
+
+```yaml
+image_points:
+  - u: 367.0
+    v: 507.0
+    x: 2.5        # body x (forward)
+    y: 0.6        # body y (left)
+    z: 0.8        # body z (up)
+  - u: 463.0
+    v: 462.0
+    x: 2.5
+    y: -0.6
+    z: 0.8
+  # ...
+```
+
+Then run PnP:
+
+```python
+import numpy as np
+from cam2body_calib.config.load import load_camera
+from cam2body_calib.estimation.pnp_solver import PnPSolver
+from cam2body_calib.io.yaml_io import read_yaml
+
+cam = load_camera("configs/camera.yaml")
+anno = read_yaml("outputs/annotations.yaml")
+
+obj_pts = np.array([[p["x"], p["y"], p["z"]] for p in anno["image_points"]],
+                   dtype=np.float64)
+img_pts = np.array([[p["u"], p["v"]] for p in anno["image_points"]],
+                   dtype=np.float64)
+
+result = PnPSolver(cam).solve(obj_pts, img_pts)
+print(f"Position: x={result.position_body[0]:.4f}, "
+      f"y={result.position_body[1]:.4f}, "
+      f"z={result.position_body[2]:.4f}")
+print(f"RPY (link): roll={result.rpy_link_body_cam[0]:.4f}, "
+      f"pitch={result.rpy_link_body_cam[1]:.4f}, "
+      f"yaw={result.rpy_link_body_cam[2]:.4f}")
+print(f"Reprojection error: mean={result.reprojection_stats.mean_error:.4f} px")
+```
+
+### 4. Check quality
+
+| Mean Reprojection Error | Rating |
+|------------------------|--------|
+| < 0.5 px | Excellent |
+| < 1.5 px | Good |
+| < 3.0 px | Fair — verify with multiple images |
+| > 3.0 px | Unreliable |
+
+Also check:
+- Is the camera position physically plausible?
+- Does the camera forward axis match the expected viewing direction?
+- Are results consistent across multiple views?
+
+## ArUco Auto-Detection (optional)
+
+If your fiducials are ArUco markers, use the `estimate` command for automatic corner detection:
+
+```bash
+uv run cam2body-calib estimate \
+  -i data/image.jpg \
+  -c configs/camera.yaml \
+  -l configs/marker_layout.yaml \
+  -o outputs/result.png
+```
+
+Prepare `marker_layout.yaml` (example: `configs/marker_layout.example.yaml`) with 3D positions of each marker's four corners in body frame. Corner order must match OpenCV's detection order (clockwise from marker top-left).
 
 ## Export Profiles
 
-Different downstream systems expect different pose6 conventions. Use export profiles in `marker_layout.yaml`:
+Different downstream systems expect different pose6 conventions. Declare in `marker_layout.yaml`:
 
 ```yaml
 export_profiles:
