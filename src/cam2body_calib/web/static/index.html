@@ -361,12 +361,6 @@ async function api(path, options) {
   return res.json();
 }
 
-// ── Default camera ──
-function setDefaultCamera(w, h) {
-  const s = Math.max(w, h);
-  state.camera = { fx: s, fy: s, cx: w / 2, cy: h / 2, width: w, height: h, model: 'pinhole', D: [] };
-}
-
 // ── Intrinsics loading ──
 intrinsicsBtn.onclick = () => intrinsicsInput.click();
 intrinsicsChange.onclick = () => intrinsicsInput.click();
@@ -417,15 +411,10 @@ async function loadImage(file) {
   // Show image immediately with FileReader
   const url = URL.createObjectURL(file);
   const img = new Image();
-  img.onload = async () => {
+  img.onload = () => {
     state.image = img;
     state.imgW = img.naturalWidth;
     state.imgH = img.naturalHeight;
-    // Set default camera from image size if none loaded
-    if (!state.camera || !state.camera.fx) {
-      setDefaultCamera(state.imgW, state.imgH);
-      renderIntrinsics();
-    }
     state.points = []; state.result = null;
     resetView(); fitZoom();
     dropHint.style.display = 'none';
@@ -434,8 +423,8 @@ async function loadImage(file) {
     URL.revokeObjectURL(url);
 
     // If camera has distortion, re-process with undistortion
-    if (state.camera.D && state.camera.D.some(d => d !== 0)) {
-      await reprocessImage();
+    if (state.camera && state.camera.D && state.camera.D.some(d => d !== 0)) {
+      reprocessImage();
     }
   };
   img.src = url;
@@ -611,7 +600,9 @@ function onCoordInput(e) {
 }
 
 function updateSolveBtn() {
-  if (!state.camera || !state.camera.fx || state.points.length < 4) { solveBtn.disabled = true; return; }
+  solveBtn.disabled = true;
+  if (!state.camera || !state.camera.fx) return;
+  if (state.points.length < 4) return;
   const hasNonZero = state.points.some(p => (p.x || 0) !== 0 || (p.y || 0) !== 0 || (p.z || 0) !== 0);
   solveBtn.disabled = !hasNonZero;
 }
