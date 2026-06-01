@@ -307,7 +307,7 @@ main {
     <div style="overflow-y:auto; flex:1">
       <table class="point-table">
         <thead><tr><th>#</th><th>u</th><th>v</th><th>x (m)</th><th>y (m)</th><th>z (m)</th></tr></thead>
-        <tbody id="points-body"><tr><td colspan="6" class="empty-state">Load intrinsics + image, then click to add points</td></tr></tbody>
+        <tbody id="points-body"><tr><td colspan="6" class="empty-state">Drop an image to get started</td></tr></tbody>
       </table>
     </div>
 
@@ -323,8 +323,9 @@ main {
 <script>
 // ── State ──
 const state = {
-  camera: null,        // {fx, fy, cx, cy, width, height, model, D, camera_name}
+  camera: null,        // always set — default pinhole or loaded from YAML
   image: null,
+  rawBlob: null,       // original image blob for re-processing
   imgW: 0, imgH: 0,
   points: [],
   result: null,
@@ -360,6 +361,12 @@ async function api(path, options) {
   return res.json();
 }
 
+// ── Default camera ──
+function setDefaultCamera(w, h) {
+  const s = Math.max(w, h);
+  state.camera = { fx: s, fy: s, cx: w / 2, cy: h / 2, width: w, height: h, model: 'pinhole', D: [] };
+}
+
 // ── Intrinsics loading ──
 intrinsicsBtn.onclick = () => intrinsicsInput.click();
 intrinsicsChange.onclick = () => intrinsicsInput.click();
@@ -373,6 +380,7 @@ intrinsicsInput.onchange = async () => {
     const data = await api('/api/camera/upload-yaml', { method: 'POST', body: fd });
     state.camera = data;
     renderIntrinsics();
+    if (state.rawBlob) reprocessImage();
     toast('Intrinsics loaded: ' + (data.camera_name || data.model + ' ' + data.width + 'x' + data.height));
     updateSolveBtn();
   } catch (e) { toast(e.message, 'error'); }
@@ -380,17 +388,16 @@ intrinsicsInput.onchange = async () => {
 
 function renderIntrinsics() {
   const c = state.camera;
-  if (!c) {
-    intrinsicsCard.classList.remove('loaded');
-    return;
-  }
+  if (!c) { intrinsicsCard.classList.remove('loaded'); return; }
   intrinsicsCard.classList.add('loaded');
   intrinsicsParams.innerHTML =
     (c.camera_name ? `<div class="name">${c.camera_name}</div>` : '') +
-    `<div><span class="val">${c.width}&times;${c.height}</span> &middot; ${c.model}</div>` +
-    `<div>K = [<span class="val">${c.fx.toFixed(1)}</span>, 0, <span class="val">${c.cx.toFixed(1)}</span>]</div>` +
-    `<div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, <span class="val">${c.fy.toFixed(1)}</span>, <span class="val">${c.cy.toFixed(1)}</span>]</div>` +
-    (c.D.length ? `<div>D = [${c.D.map(d => d.toFixed(4)).join(', ')}]</div>` : '');
+    (c.fx > 0
+      ? `<div><span class="val">${c.width}&times;${c.height}</span> &middot; ${c.model}</div>
+         <div>K = [<span class="val">${c.fx.toFixed(1)}</span>, 0, <span class="val">${c.cx.toFixed(1)}</span>]</div>
+         <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[0, <span class="val">${c.fy.toFixed(1)}</span>, <span class="val">${c.cy.toFixed(1)}</span>]</div>`
+      : `<div><span class="val">${c.width}&times;${c.height}</span></div><div>No intrinsics loaded</div>`)
+    + (c.D && c.D.length ? `<div>D = [${c.D.map(d => d.toFixed(4)).join(', ')}]</div>` : '');
   intrinsicsInput.value = '';
 }
 
@@ -406,44 +413,57 @@ viewer.addEventListener('drop', e => {
 });
 
 async function loadImage(file) {
-  if (!state.camera) { toast('Load intrinsics YAML first', 'error'); return; }
+  state.rawBlob = file;
+  // Show image immediately with FileReader
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = async () => {
+    state.image = img;
+    state.imgW = img.naturalWidth;
+    state.imgH = img.naturalHeight;
+    // Set default camera from image size if none loaded
+    if (!state.camera || !state.camera.fx) {
+      setDefaultCamera(state.imgW, state.imgH);
+      renderIntrinsics();
+    }
+    state.points = []; state.result = null;
+    resetView(); fitZoom();
+    dropHint.style.display = 'none';
+    render(); renderTable(); renderResults();
+    clearBtn.disabled = true; updateSolveBtn(); exportBtn.disabled = true;
+    URL.revokeObjectURL(url);
 
-  // Undistort with camera params
-  const fdImg = new FormData();
-  fdImg.append('image', file);
-  fdImg.append('camera', JSON.stringify(state.camera));
+    // If camera has distortion, re-process with undistortion
+    if (state.camera.D && state.camera.D.some(d => d !== 0)) {
+      await reprocessImage();
+    }
+  };
+  img.src = url;
+  fileInput.value = '';
+}
 
+async function reprocessImage() {
+  if (!state.rawBlob || !state.camera) return;
+  const fd = new FormData();
+  fd.append('image', state.rawBlob);
+  fd.append('camera', JSON.stringify(state.camera));
   try {
-    const data = await api('/api/undistort-with-camera', { method: 'POST', body: fdImg });
-    // Update camera with undistorted params
-    state.camera.fx = data.fx;
-    state.camera.fy = data.fy;
-    state.camera.cx = data.cx;
-    state.camera.cy = data.cy;
-    state.camera.width = data.width;
-    state.camera.height = data.height;
+    const data = await api('/api/undistort-with-camera', { method: 'POST', body: fd });
+    state.camera.fx = data.fx; state.camera.fy = data.fy;
+    state.camera.cx = data.cx; state.camera.cy = data.cy;
+    state.camera.width = data.width; state.camera.height = data.height;
     state.camera.model = data.model;
     renderIntrinsics();
-
     const blob = b64toBlob(data.image_base64);
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
       state.image = img;
-      state.imgW = data.width;
-      state.imgH = data.height;
-      state.points = [];
-      state.result = null;
-      resetView(); fitZoom();
-      dropHint.style.display = 'none';
-      render(); renderTable(); renderResults();
-      clearBtn.disabled = true;
-      updateSolveBtn();
-      exportBtn.disabled = true;
+      state.imgW = data.width; state.imgH = data.height;
+      resetView(); fitZoom(); render();
       URL.revokeObjectURL(url);
     };
     img.src = url;
-    fileInput.value = '';
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -591,10 +611,9 @@ function onCoordInput(e) {
 }
 
 function updateSolveBtn() {
-  if (!state.camera || state.points.length < 4) { solveBtn.disabled = true; return; }
-  const allFilled = state.points.every(p => p.x !== undefined && p.y !== undefined && p.z !== undefined
-    && p.x !== 0 && p.y !== 0 && p.z !== 0);
-  solveBtn.disabled = !allFilled;
+  if (!state.camera || !state.camera.fx || state.points.length < 4) { solveBtn.disabled = true; return; }
+  const hasNonZero = state.points.some(p => (p.x || 0) !== 0 || (p.y || 0) !== 0 || (p.z || 0) !== 0);
+  solveBtn.disabled = !hasNonZero;
 }
 
 // ── Solve ──
