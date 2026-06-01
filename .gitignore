@@ -29,12 +29,10 @@ Thumbs.db
 # Project-specific outputs
 outputs/*
 !outputs/.gitkeep
-!outputs/example_result.png
 
 # Project-specific data
 data/*
 !data/README.md
-!data/demo_blurred.png
 
 # Claude AI
 .claude/

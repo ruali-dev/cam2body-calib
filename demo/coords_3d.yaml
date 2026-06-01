@@ -1,0 +1,36 @@
+# 3D coordinates of marker corners in body frame
+# Unit: meters
+# Body frame (right-handed): x=forward, y=left, z=up
+#
+# The 4 corners form a rectangular marker on the ground.
+# Points correspond to the annotation order (clockwise from top-left in image).
+#
+# To reproduce:
+#   1. uv run cam2body-calib ui
+#   2. Load intrinsics: demo/intrinsics.yaml
+#   3. Load image: demo/image.png
+#   4. Click these 4 corners in order (top-left → top-right → bottom-right → bottom-left)
+#   5. Fill in the x, y, z values below
+#   6. Solve PnP
+
+points:
+  - u: 368.0
+    v: 507.0
+    x: 1.50
+    y: 1.80
+    z: -1.40
+  - u: 467.0
+    v: 462.0
+    x: 2.50
+    y: 1.80
+    z: -1.40
+  - u: 409.0
+    v: 629.0
+    x: 1.50
+    y: 0.80
+    z: -1.40
+  - u: 533.0
+    v: 536.0
+    x: 2.50
+    y: 0.80
+    z: -1.40
