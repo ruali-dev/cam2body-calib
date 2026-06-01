@@ -1,0 +1,15 @@
+# NW (Northwest) Fisheye Camera Intrinsics
+# Calibrated with OpenCV fisheye model, 11x8 chessboard, 0.05m squares
+
+camera_name: "nw"
+model: fisheye
+image_width: 960
+image_height: 768
+
+K:
+  - [263.8344595352701, 0.0, 486.3840841431358]
+  - [0.0, 371.78835768652004, 386.4528511420843]
+  - [0.0, 0.0, 1.0]
+
+# Fisheye distortion: [k1, k2, k3, k4]
+D: [0.1013726478453686, 0.0230220139196409, -0.05484839372399674, 0.018862730654405416]

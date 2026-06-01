@@ -1,0 +1,15 @@
+# SW (Southwest) Fisheye Camera Intrinsics
+# Calibrated with OpenCV fisheye model, 11x8 chessboard, 0.05m squares
+
+camera_name: "sw"
+model: fisheye
+image_width: 960
+image_height: 768
+
+K:
+  - [253.47746832480777, 0.0, 479.6624552664151]
+  - [0.0, 360.3503648168306, 382.8685355956612]
+  - [0.0, 0.0, 1.0]
+
+# Fisheye distortion: [k1, k2, k3, k4]
+D: [0.14499177091569893, -0.048373845085176975, 0.008346499958302259, -0.0012458396400779623]

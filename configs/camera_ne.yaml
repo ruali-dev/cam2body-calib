@@ -1,0 +1,15 @@
+# NE (Northeast) Fisheye Camera Intrinsics
+# Calibrated with OpenCV fisheye model, 11x8 chessboard, 0.05m squares
+
+camera_name: "ne"
+model: fisheye
+image_width: 960
+image_height: 768
+
+K:
+  - [255.18238469518738, 0.0, 478.2833254645335]
+  - [0.0, 364.4792463970692, 386.3503012450337]
+  - [0.0, 0.0, 1.0]
+
+# Fisheye distortion: [k1, k2, k3, k4]
+D: [0.13918752992951902, -0.03289625035204537, -0.005891307509424164, 0.0023054107840728465]
