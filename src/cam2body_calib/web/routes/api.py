@@ -5,7 +5,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from cam2body_calib.camera.model import CameraModel
@@ -96,7 +96,11 @@ async def upload_camera_yaml(file: UploadFile):
 
 
 @router.post("/undistort-with-camera")
-async def undistort_with_camera(image: UploadFile, camera: str, balance: float = 0.0):
+async def undistort_with_camera(
+    image: UploadFile,
+    camera: str = Form(...),
+    balance: float = Form(0.0),
+):
     """Upload an image and undistort it with camera params (JSON string)."""
     import json
 
