@@ -106,4 +106,4 @@ cam2body-calib/
 
 ## License
 
-MIT
+Apache-2.0

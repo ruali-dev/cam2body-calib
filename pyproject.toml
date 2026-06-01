@@ -7,7 +7,7 @@ name = "cam2body-calib"
 version = "0.1.0"
 description = "Monocular camera-to-body extrinsics calibration using visual fiducial markers"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "cam2body-calib contributors" }]
 dependencies = [
     "opencv-contrib-python>=4.8.0",
