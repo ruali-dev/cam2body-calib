@@ -19,6 +19,8 @@ Opens a browser. The whole workflow happens there:
 5. Click Solve PnP
 6. Pick an export profile (right-handed or left-handed), Export YAML
 
+![](D:\dev\projects\cam2body-calib\assets\效果图.png)
+
 A reproducible example lives in `demo/` — intrinsics, image, and 3D coords included.
 
 A CLI mode also exists if you prefer:

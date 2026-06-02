@@ -21,6 +21,8 @@ uv run cam2body-calib ui
 5. 点 Solve PnP
 6. 选择导出坐标系（右手系 / 左手系），Export YAML
 
+![](D:\dev\projects\cam2body-calib\assets\效果图.png)
+
 `demo/` 目录下有一份完整的复现样例，包含内参、图片和 3D 坐标。
 
 如果不想用 Web 界面，也可以走命令行手动标注：

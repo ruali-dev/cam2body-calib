@@ -37,6 +37,13 @@ data/*
 # Claude AI
 .claude/
 .snapshots/
+CLAUDE.md
 
 # CodeGraph index
 .codegraph/
+
+# Temp scripts
+_blur_tool.py
+
+# Export outputs in demo/
+demo/extrinsic.yaml
