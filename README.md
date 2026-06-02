@@ -1,8 +1,10 @@
 # cam2body-calib
 
-Camera-to-body extrinsics calibration. One image + 3D coordinates of four points → 6-DoF camera pose in the vehicle body frame.
+Monocular camera-to-body extrinsics calibration: a few known 3D marker points → 6-DoF camera pose in the body/base_link frame.
 
 It solves a Perspective-n-Point problem: given the camera intrinsics and a few 3D marker positions you measured on the vehicle, find where the camera is mounted and which way it points.
+
+> 中文文档 → [README_zh.md](README_zh.md)
 
 ## Quick Start
 
@@ -19,7 +21,7 @@ Opens a browser. The whole workflow happens there:
 5. Click Solve PnP
 6. Pick an export profile (right-handed or left-handed), Export YAML
 
-![](D:\dev\projects\cam2body-calib\assets\效果图.png)
+![](assets/效果图.png)
 
 A reproducible example lives in `demo/` — intrinsics, image, and 3D coords included.
 
@@ -34,7 +36,7 @@ This opens an OpenCV window for manual corner annotation.
 ## Install
 
 ```bash
-git clone https://github.com/your-username/cam2body-calib.git
+git clone https://github.com/ruali-dev/cam2body-calib.git
 cd cam2body-calib
 uv sync
 ```

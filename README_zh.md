@@ -1,6 +1,6 @@
 # cam2body-calib
 
-相机外参标定。一张图 + 四个点的 3D 坐标 → 相机在车体坐标系下的 6-DoF 位姿。
+单目相机到车体坐标系的外参标定工具：一张图 + 若干个已知 3D 标志点 → 反求相机在 body/base_link 系下的 6-DoF 位姿。
 
 核心是解一个 PnP 问题：你知道相机内参，也量出了几个标志物角点在车上的真实 3D 位置，图上找到了这些点的像素位置，反推相机装在哪、朝哪个方向。
 
@@ -21,7 +21,7 @@ uv run cam2body-calib ui
 5. 点 Solve PnP
 6. 选择导出坐标系（右手系 / 左手系），Export YAML
 
-![](D:\dev\projects\cam2body-calib\assets\效果图.png)
+![](assets/效果图.png)
 
 `demo/` 目录下有一份完整的复现样例，包含内参、图片和 3D 坐标。
 
@@ -36,7 +36,7 @@ uv run cam2body-calib --image data/image.jpg --camera configs/camera.yaml
 ## 安装
 
 ```bash
-git clone https://github.com/your-username/cam2body-calib.git
+git clone https://github.com/ruali-dev/cam2body-calib.git
 cd cam2body-calib
 uv sync
 ```
